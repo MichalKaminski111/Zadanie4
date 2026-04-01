@@ -47,14 +47,11 @@ namespace LegacyRenewalApp
             }
 
             decimal baseAmount = (plan.MonthlyPricePerSeat * seatCount * 12m) + plan.SetupFee;
-            decimal discountAmount = customer.getSegmentDiscount(baseAmount, plan.IsEducationEligible);
-            string notes = customer.getSegmentNote(plan.IsEducationEligible);
+            
+            CustomerDiscountCalculator customerDiscountCalculator = new CustomerDiscountCalculator(customer.Segment, customer.YearsWithCompany);
 
-            discountAmount += customer.getLoyaltyDiscount(baseAmount);
-            notes += customer.getLoyaltyNote();
-
-            discountAmount += customer.getSeatDiscount(baseAmount, seatCount);
-            notes += customer.getSeatNote(seatCount);
+            decimal discountAmount = customerDiscountCalculator.getALlDiscounts(plan.IsEducationEligible, seatCount);
+            string notes = customerDiscountCalculator.getALlNotes(plan.IsEducationEligible, seatCount);
 
             if (useLoyaltyPoints && customer.LoyaltyPoints > 0)
             {
