@@ -1,3 +1,5 @@
+using System.Collections.Generic;
+
 namespace LegacyRenewalApp
 {
     public class SubscriptionPlan
@@ -9,31 +11,23 @@ namespace LegacyRenewalApp
         public bool IsEducationEligible { get; set; }
 
 
-        public decimal getPlanCodeSupportFee(bool includePremiumSupport)
+        private readonly Dictionary<string, decimal> PlansSupportFee = new()
         {
+            { "START", 250m},
+            { "PRO", 400m},
+            { "ENTERPRISE", 700m},
+        };
+        
+        public (decimal, string) GetPlanSupport(bool includePremiumSupport)
+        {
+            string note = "";
+            decimal fee = 0m;
             if (includePremiumSupport)
-            {
-                if (Code == "START")
-                {
-                    return 250m;
-                }
-                else if (Code == "PRO")
-                {
-                    return 400m;
-                }
-                else if (Code == "ENTERPRISE")
-                {
-                    return 700m;
-                }
-            }
-            return 0m;
-        }
+                note += "premium support included; ";
+            if (!PlansSupportFee.TryGetValue(Code, out fee))
+                note += "unknown plan code for support fee; ";
 
-        public string getPlanCodeSupprtFeeNote(bool includePremiumSupport)
-        {
-            if (includePremiumSupport)
-                return "premium support included; ";
-            return string.Empty;
+            return (fee, note);
         }
     }
 }

@@ -1,4 +1,5 @@
 using System;
+using LegacyRenewalApp.payment;
 
 namespace LegacyRenewalApp
 {
@@ -48,74 +49,32 @@ namespace LegacyRenewalApp
 
             decimal baseAmount = (plan.MonthlyPricePerSeat * seatCount * 12m) + plan.SetupFee;
             
-            CustomerDiscountCalculator customerDiscountCalculator = new CustomerDiscountCalculator(customer.Segment, customer.YearsWithCompany);
+            CustomerDiscountCalculator customerDiscountCalculator = new CustomerDiscountCalculator(
+                [new SegmentDiscount(), new SeatDiscount(), new LoyaltyDiscount(), new PointsDiscount(useLoyaltyPoints)]);
 
-            decimal discountAmount = customerDiscountCalculator.getALlDiscounts(plan.IsEducationEligible, seatCount);
-            string notes = customerDiscountCalculator.getALlNotes(plan.IsEducationEligible, seatCount);
+            var (discountAmount, notes) = customerDiscountCalculator.CalculateAll(new CustomerDiscountContext(
+                customer.Segment,
+                customer.YearsWithCompany,
+                customer.LoyaltyPoints,
+                baseAmount,
+                plan.IsEducationEligible,
+                seatCount));
 
-            if (useLoyaltyPoints && customer.LoyaltyPoints > 0)
-            {
-                int pointsToUse = customer.LoyaltyPoints > 200 ? 200 : customer.LoyaltyPoints;
-                discountAmount += pointsToUse;
-                notes += $"loyalty points used: {pointsToUse}; ";
-            }
+            var amountAfterDiscount = baseAmount - discountAmount;
 
-            decimal subtotalAfterDiscount = baseAmount - discountAmount;
-            if (subtotalAfterDiscount < 300m)
-            {
-                subtotalAfterDiscount = 300m;
-                notes += "minimum discounted subtotal applied; ";
-            }
-
-            decimal supportFee = plan.getPlanCodeSupportFee(includePremiumSupport);
-            notes += plan.getPlanCodeSupprtFeeNote(includePremiumSupport);
+            var supportPlan = plan.GetPlanSupport(includePremiumSupport);
+            decimal supportFee = supportPlan.Item1;
+            notes += supportPlan.Item2;
             
+            PaymentFeeCalculator feeCalculator = new PaymentFeeCalculator();
+            var fee = feeCalculator.CalculateTotalAmount(normalizedPaymentMethod, amountAfterDiscount + supportFee);
+            
+            decimal paymentFee = fee.Amount;
+            notes += fee.Note;
 
-            decimal paymentFee = 0m;
-            if (normalizedPaymentMethod == "CARD")
-            {
-                paymentFee = (subtotalAfterDiscount + supportFee) * 0.02m;
-                notes += "card payment fee; ";
-            }
-            else if (normalizedPaymentMethod == "BANK_TRANSFER")
-            {
-                paymentFee = (subtotalAfterDiscount + supportFee) * 0.01m;
-                notes += "bank transfer fee; ";
-            }
-            else if (normalizedPaymentMethod == "PAYPAL")
-            {
-                paymentFee = (subtotalAfterDiscount + supportFee) * 0.035m;
-                notes += "paypal fee; ";
-            }
-            else if (normalizedPaymentMethod == "INVOICE")
-            {
-                paymentFee = 0m;
-                notes += "invoice payment; ";
-            }
-            else
-            {
-                throw new ArgumentException("Unsupported payment method");
-            }
+            decimal taxRate = CountryTaxRate.GetTaxRate(customer.Country);
 
-            decimal taxRate = 0.20m;
-            if (customer.Country == "Poland")
-            {
-                taxRate = 0.23m;
-            }
-            else if (customer.Country == "Germany")
-            {
-                taxRate = 0.19m;
-            }
-            else if (customer.Country == "Czech Republic")
-            {
-                taxRate = 0.21m;
-            }
-            else if (customer.Country == "Norway")
-            {
-                taxRate = 0.25m;
-            }
-
-            decimal taxBase = subtotalAfterDiscount + supportFee + paymentFee;
+            decimal taxBase = amountAfterDiscount + supportFee + paymentFee;
             decimal taxAmount = taxBase * taxRate;
             decimal finalAmount = taxBase + taxAmount;
 
